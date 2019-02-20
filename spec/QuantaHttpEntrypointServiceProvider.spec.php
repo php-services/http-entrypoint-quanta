@@ -12,7 +12,6 @@ use Psr\Http\Server\RequestHandlerInterface;
 
 use Interop\Container\ServiceProviderInterface;
 
-use Quanta\Container;
 use Quanta\HttpEntrypoint;
 use Nyholm\Psr7Server\ServerRequestCreator;
 use Nyholm\Psr7Server\ServerRequestCreatorInterface;
@@ -24,6 +23,8 @@ use Services\Http\QuantaHttpEntrypointServiceProvider;
 describe('QuantaHttpEntrypointServiceProvider', function () {
 
     beforeEach(function () {
+
+        $this->container = mock(ContainerInterface::class);
 
         $this->provider = new QuantaHttpEntrypointServiceProvider;
 
@@ -37,40 +38,49 @@ describe('QuantaHttpEntrypointServiceProvider', function () {
 
     describe('->getFactories()', function () {
 
+        beforeEach(function () {
+
+            $this->factories = $this->provider->getFactories();
+
+        });
+
         it('should return an array of length 5', function () {
 
-            $test = $this->provider->getFactories();
-
-            expect($test)->toBeAn('array');
-            expect($test)->toHaveLength(5);
+            expect($this->factories)->toBeAn('array');
+            expect($this->factories)->toHaveLength(5);
 
         });
 
         it('should provide a ServerRequestCreatorInterface entry aliasing the ServerRequestCreator one', function () {
 
-            $creator = mock(ServerRequestCreatorInterface::class);
+            $creator = new ServerRequestCreator(...[
+                mock(ServerRequestFactoryInterface::class)->get(),
+                mock(UriFactoryInterface::class)->get(),
+                mock(UploadedFileFactoryInterface::class)->get(),
+                mock(StreamFactoryInterface::class)->get(),
+            ]);
 
-            $container = new Container(array_merge($this->provider->getFactories(), [
-                ServerRequestCreator::class => stub()->returns($creator),
-            ]));
+            $this->container->get->with(ServerRequestCreator::class)->returns($creator);
 
-            $test = $container->get(ServerRequestCreatorInterface::class);
+            $factory = $this->factories[ServerRequestCreatorInterface::class];
 
-            expect($test)->toBe($creator->get());
+            $test = $factory($this->container->get());
+
+            expect($test)->toBe($creator);
 
         });
 
         it('should provide a EmitterInterface entry aliasing the EmitterStack one', function () {
 
-            $emitter = mock(EmitterInterface::class);
+            $emitter = new EmitterStack;
 
-            $container = new Container(array_merge($this->provider->getFactories(), [
-                EmitterStack::class => stub()->returns($emitter),
-            ]));
+            $this->container->get->with(EmitterStack::class)->returns($emitter);
 
-            $test = $container->get(EmitterInterface::class);
+            $factory = $this->factories[EmitterInterface::class];
 
-            expect($test)->toBe($emitter->get());
+            $test = $factory($this->container->get());
+
+            expect($test)->toBe($emitter);
 
         });
 
@@ -80,13 +90,13 @@ describe('QuantaHttpEntrypointServiceProvider', function () {
             $handler = mock(RequestHandlerInterface::class);
             $emitter = mock(EmitterInterface::class);
 
-            $container = new Container(array_merge($this->provider->getFactories(), [
-                ServerRequestCreatorInterface::class => stub()->returns($creator),
-                RequestHandlerInterface::class => stub()->returns($handler),
-                EmitterInterface::class => stub()->returns($emitter),
-            ]));
+            $this->container->get->with(ServerRequestCreatorInterface::class)->returns($creator);
+            $this->container->get->with(RequestHandlerInterface::class)->returns($handler);
+            $this->container->get->with(EmitterInterface::class)->returns($emitter);
 
-            $test = $container->get(HttpEntrypoint::class);
+            $factory = $this->factories[HttpEntrypoint::class];
+
+            $test = $factory($this->container->get());
 
             expect($test)->toEqual(new HttpEntrypoint(...[
                 $creator->get(),
@@ -96,41 +106,41 @@ describe('QuantaHttpEntrypointServiceProvider', function () {
 
         });
 
-        it('should provide an EmitterStack entry', function () {
+        it('should provide an EmitterStack entry with a SapiEmitter', function () {
 
-            $container = new Container($this->provider->getFactories());
+            $factory = $this->factories[EmitterStack::class];
 
-            $test = $container->get(EmitterStack::class);
+            $test = $factory($this->container->get());
 
-            $expected = new EmitterStack;
+            $emitter = new EmitterStack;
 
-            $expected->push(new SapiEmitter);
+            $emitter->push(new SapiEmitter);
 
-            expect($test)->toEqual($expected);
+            expect($test)->toEqual($emitter);
 
         });
 
         it('should provide a ServerRequestCreator entry', function () {
 
-            $factories[0] = mock(ServerRequestFactoryInterface::class);
-            $factories[1] = mock(UriFactoryInterface::class);
-            $factories[2] = mock(UploadedFileFactoryInterface::class);
-            $factories[3] = mock(StreamFactoryInterface::class);
+            $request = mock(ServerRequestFactoryInterface::class);
+            $uri = mock(UriFactoryInterface::class);
+            $uploaded = mock(UploadedFileFactoryInterface::class);
+            $stream = mock(StreamFactoryInterface::class);
 
-            $container = new Container(array_merge($this->provider->getFactories(), [
-                ServerRequestFactoryInterface::class => stub()->returns($factories[0]),
-                UriFactoryInterface::class => stub()->returns($factories[1]),
-                UploadedFileFactoryInterface::class => stub()->returns($factories[2]),
-                StreamFactoryInterface::class => stub()->returns($factories[3]),
-            ]));
+            $this->container->get->with(ServerRequestFactoryInterface::class)->returns($request);
+            $this->container->get->with(UriFactoryInterface::class)->returns($uri);
+            $this->container->get->with(UploadedFileFactoryInterface::class)->returns($uploaded);
+            $this->container->get->with(StreamFactoryInterface::class)->returns($stream);
 
-            $test = $container->get(ServerRequestCreator::class);
+            $factory = $this->factories[ServerRequestCreator::class];
+
+            $test = $factory($this->container->get());
 
             expect($test)->toEqual(new ServerRequestCreator(...[
-                $factories[0]->get(),
-                $factories[1]->get(),
-                $factories[2]->get(),
-                $factories[3]->get(),
+                $request->get(),
+                $uri->get(),
+                $uploaded->get(),
+                $stream->get(),
             ]));
 
         });
