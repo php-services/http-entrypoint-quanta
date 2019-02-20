@@ -52,7 +52,13 @@ final class QuantaHttpEntrypointServiceProvider implements ServiceProviderInterf
         $handler = $container->get(RequestHandlerInterface::class);
         $emitter = $container->get(EmitterInterface::class);
 
-        return new HttpEntrypoint($creator, $handler, [$emitter, 'emit']);
+        /**
+         * Phpstan ...
+         * @var callable
+         */
+        $callable = [$emitter, 'emit'];
+
+        return new HttpEntrypoint($creator, $handler, $callable);
     }
 
     public static function getEmitterStack(): EmitterStack
